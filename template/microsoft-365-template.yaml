@@ -1,0 +1,182 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    -
+      uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates
+    -
+      uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+    -
+      uuid: c2c162144c2d4c5491c8801193af4945
+      name: Templates/Cloud
+  templates:
+    -
+      uuid: 39297d88b83d42ccaa48031706710adf
+      template: 'Template - Microsoft365'
+      name: 'Template - Microsoft365'
+      groups:
+        -
+          name: Templates
+        -
+          name: Templates/Applications
+        -
+          name: Templates/Cloud
+      items:
+        -
+          uuid: 2f2948eee3c34c528992af69bd65332f
+          name: 'Microsoft365 - Last AzureAD Sync'
+          type: EXTERNAL
+          key: 'checkAzureADOrg.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          delay: 30m
+          trends: '0'
+          value_type: TEXT
+          preprocessing:
+            -
+              type: JSONPATH
+              parameters:
+                - '$.value[0].onPremisesLastSyncDateTime'
+          tags:
+            -
+              tag: Application
+              value: Microsoft365
+            -
+              tag: Type
+              value: AzureAD
+        -
+          uuid: a354ba552c1a441781b5c6d3eaec6bbc
+          name: 'Microsoft365 - Json Licence Data'
+          type: EXTERNAL
+          key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          delay: 1h
+          history: 1h
+          trends: '0'
+          value_type: TEXT
+          tags:
+            -
+              tag: Application
+              value: Microsoft365
+            -
+              tag: Type
+              value: Licences
+        -
+          uuid: 4037f81a1c14441eb1fa71d801468533
+          name: 'M365 - Json Health Text'
+          type: EXTERNAL
+          key: 'checkM365Health.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          delay: 1h
+          history: 1d
+          trends: '0'
+          value_type: TEXT
+          tags:
+            -
+              tag: Application
+              value: Microsoft365
+            -
+              tag: Type
+              value: Health
+      discovery_rules:
+        -
+          uuid: 036e824bb92e444e92363830ca5fb44c
+          name: 'Microsoft 365 - Check Health - Discovery'
+          type: DEPENDENT
+          key: microsoft365.checkHealth.discovery
+          delay: '0'
+          lifetime: 1d
+          item_prototypes:
+            -
+              uuid: 348ef863ea794d38a3627f8f0cf7dc9d
+              name: 'Microsoft 365 - Service {#SERVICE} Status'
+              type: DEPENDENT
+              key: 'microsoft365.servicestatus[{#ID}]'
+              delay: '0'
+              history: 30d
+              trends: '0'
+              value_type: TEXT
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.value[?(@.id=="{#ID}")].status.first()'
+              master_item:
+                key: 'checkM365Health.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+              tags:
+                -
+                  tag: Application
+                  value: Microsoft365
+                -
+                  tag: Type
+                  value: Health
+          master_item:
+            key: 'checkM365Health.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          lld_macro_paths:
+            -
+              lld_macro: '{#ID}'
+              path: $.id
+            -
+              lld_macro: '{#SERVICE}'
+              path: $.service
+          preprocessing:
+            -
+              type: JSONPATH
+              parameters:
+                - $.value
+        -
+          uuid: 82c1e7c19d174acaa2a23513ee38931f
+          name: 'Microsoft 365 - Check Licence - Discovery'
+          type: DEPENDENT
+          key: microsoft365.checkLicence.discovery
+          delay: '0'
+          lifetime: 1d
+          item_prototypes:
+            -
+              uuid: 6db67a12a3414c5f99dabfa5b0dab372
+              name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - total'
+              type: DEPENDENT
+              key: 'microsoft365.check.licence.[{#SKUPARTNUMBER}_total]'
+              delay: '0'
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.value[?(@.skuPartNumber=="{#SKUPARTNUMBER}")].prepaidUnits.enabled.first()'
+              master_item:
+                key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+              tags:
+                -
+                  tag: Application
+                  value: Microsoft365
+                -
+                  tag: Type
+                  value: Licence
+            -
+              uuid: fb52aadbac2e4a02b7df8a7112a1405e
+              name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - consumedUnits'
+              type: DEPENDENT
+              key: 'microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits]'
+              delay: '0'
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.value[?(@.skuPartNumber=="{#SKUPARTNUMBER}")].consumedUnits.first()'
+              master_item:
+                key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+              tags:
+                -
+                  tag: Application
+                  value: Microsoft365
+                -
+                  tag: Type
+                  value: Licence
+          master_item:
+            key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          lld_macro_paths:
+            -
+              lld_macro: '{#SKUPARTNUMBER}'
+              path: $.skuPartNumber
+          preprocessing:
+            -
+              type: JSONPATH
+              parameters:
+                - $.value
