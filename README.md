@@ -18,3 +18,4 @@ You must create an Azure AD application with following permissions :
 ### On Zabbix server (or Zabbix proxy)
 
 * Perl must be installed with requests module
+* Validated with Zabbix version 6.4
