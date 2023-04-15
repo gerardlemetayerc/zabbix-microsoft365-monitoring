@@ -28,3 +28,4 @@ You must create an Azure AD application with following permissions :
 2. Create Azure AD application with correct permissions
 3. Add template into Zabbix
 4. Attach template to host wich you want to add items and triggers
+5. On host, add following macro : tenantID, zabbixAppId, ZabbixAppSecret (wich obviously match tenantID, App Secret and App ID...)
