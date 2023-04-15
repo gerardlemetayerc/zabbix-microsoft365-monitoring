@@ -13,7 +13,7 @@ Include following monitoring :
 
 You must create an Azure AD application with following permissions :
 * *Organization.Read.All* (granted as application) 
-    * Supervision for Azure AD synchronzation and licences
+    * Supervision for Azure AD synchronization and licences
 * *ServiceHealth.Read.All* (granted as application)
     * Supervision for service healths
 
