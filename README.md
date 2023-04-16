@@ -19,13 +19,11 @@ You must create an Azure AD application with following permissions :
 
 ### On Zabbix server (or Zabbix proxy)
 
-* Perl must be installed with requests module
 * Validated with Zabbix version 6.4
 
 ## How to install
 
-1. Deploy script externalScript/checkMicrosoftGraph.py into Zabbix server external script repo
-2. Create Azure AD application with correct permissions
-3. Add template into Zabbix
-4. Attach template to host wich you want to add items and triggers
-5. On host, add following macro : tenantID, zabbixAppId, ZabbixAppSecret (wich obviously match tenantID, App Secret and App ID...)
+1. Create Azure AD application with correct permissions
+2. Add template into Zabbix
+3. Attach template to host wich you want to add items and triggers
+4. On host, add following macro : tenantID, zabbixAppId, ZabbixAppSecret (wich obviously match tenantID, App Secret and App ID...)
