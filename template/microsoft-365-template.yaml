@@ -15,6 +15,9 @@ zabbix_export:
       uuid: 39297d88b83d42ccaa48031706710adf
       template: 'Microsoft 365 by script'
       name: 'Microsoft 365 by script'
+      vendor:
+        name: Charles GERARD-LE METAYER
+        version: 1.0.0
       groups:
         -
           name: Templates
@@ -29,8 +32,6 @@ zabbix_export:
           type: SCRIPT
           key: azureAD.organization.data
           delay: 30m
-          trends: '0'
-          value_type: TEXT
           params: |
             var AAD = {
                 params: {},
@@ -140,6 +141,10 @@ zabbix_export:
               type: JSONPATH
               parameters:
                 - '$.value[0].onPremisesLastSyncDateTime'
+            -
+              type: JAVASCRIPT
+              parameters:
+                - 'return Math.round(((new Date()).getTime() - (new Date(''2023-04-16T17:18:27Z'')).getTime())/60000)'
           timeout: 10s
           parameters:
             -
@@ -158,6 +163,17 @@ zabbix_export:
             -
               tag: Type
               value: AzureAD
+          triggers:
+            -
+              uuid: 2542eb89bf9342539826e7679b1d6108
+              expression: 'last(/Microsoft 365 by script/azureAD.organization.data)>=40 and last(/Microsoft 365 by script/azureAD.organization.data)<60'
+              name: 'Warning - Last Azure AD Sync - More than 40 min'
+              priority: WARNING
+            -
+              uuid: b83b6918d1ff4ef0b444b23aab1ca545
+              expression: 'last(/Microsoft 365 by script/azureAD.organization.data)>=60 and last(/Microsoft 365 by script/azureAD.organization.data)<120'
+              name: 'Warning - Last Azure AD Sync - More than 60 min'
+              priority: HIGH
         -
           uuid: 4037f81a1c14441eb1fa71d801468533
           name: 'Microsoft 365 - Json Health data'
