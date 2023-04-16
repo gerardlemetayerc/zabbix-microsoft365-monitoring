@@ -13,8 +13,8 @@ zabbix_export:
   templates:
     -
       uuid: 39297d88b83d42ccaa48031706710adf
-      template: 'Template - Microsoft365'
-      name: 'Template - Microsoft365'
+      template: 'Microsoft 365 by script'
+      name: 'Microsoft 365 by script'
       groups:
         -
           name: Templates
@@ -26,16 +26,130 @@ zabbix_export:
         -
           uuid: 2f2948eee3c34c528992af69bd65332f
           name: 'Microsoft365 - Last AzureAD Sync'
-          type: EXTERNAL
-          key: 'checkAzureADOrg.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          type: SCRIPT
+          key: azureAD.organization.data
           delay: 30m
           trends: '0'
           value_type: TEXT
+          params: |
+            var AAD = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AAD.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AAD.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AAD.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AAD.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AAD.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AAD.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AAD.params.app_id) + '&client_secret=' + encodeURIComponent(AAD.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AAD.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        organization = AAD.request('https://graph.microsoft.com/v1.0/organization');
+                        data.value = organization.value;
+                        //if ('value' in organization && Array.isArray(organization.value) && organization.value.length > 0) {
+                        //    organization.value = organization;
+                        //}
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
           preprocessing:
             -
               type: JSONPATH
               parameters:
                 - '$.value[0].onPremisesLastSyncDateTime'
+          parameters:
+            -
+              name: app_id
+              value: '{$ZABBIXAPPID}'
+            -
+              name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            -
+              name: tenant_id
+              value: '{$TENANTID}'
           tags:
             -
               tag: Application
@@ -44,30 +158,128 @@ zabbix_export:
               tag: Type
               value: AzureAD
         -
-          uuid: a354ba552c1a441781b5c6d3eaec6bbc
-          name: 'Microsoft365 - Json Licence Data'
-          type: EXTERNAL
-          key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
-          delay: 1h
-          history: 1h
-          trends: '0'
-          value_type: TEXT
-          tags:
-            -
-              tag: Application
-              value: Microsoft365
-            -
-              tag: Type
-              value: Licences
-        -
           uuid: 4037f81a1c14441eb1fa71d801468533
-          name: 'M365 - Json Health Text'
-          type: EXTERNAL
-          key: 'checkM365Health.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+          name: 'Microsoft 365 - Json Health data'
+          type: SCRIPT
+          key: microsoft365.health.data
           delay: 1h
-          history: 1d
+          history: '0'
           trends: '0'
           value_type: TEXT
+          params: |
+            var AADHealth = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AADHealth.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AADHealth.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AADHealth.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AADHealth.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AADHealth.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AADHealth.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AADHealth.params.app_id) + '&client_secret=' + encodeURIComponent(AADHealth.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AADHealth.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        returnedData = AADHealth.request('https://graph.microsoft.com/v1.0/admin/serviceAnnouncement/healthOverviews');
+                        if ('value' in returnedData && Array.isArray(returnedData.value) && returnedData.value.length > 0) {
+                            data.value = returnedData.value;
+                        }
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
+          timeout: 10s
+          parameters:
+            -
+              name: app_id
+              value: '{$ZABBIXAPPID}'
+            -
+              name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            -
+              name: tenant_id
+              value: '{$TENANTID}'
           tags:
             -
               tag: Application
@@ -75,6 +287,136 @@ zabbix_export:
             -
               tag: Type
               value: Health
+        -
+          uuid: a354ba552c1a441781b5c6d3eaec6bbc
+          name: 'Microsoft365 - Json Licence Data'
+          type: SCRIPT
+          key: microsoft365.licence.data
+          delay: 1h
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          params: |
+            var AAD = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AAD.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AAD.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AAD.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AAD.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AAD.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AAD.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AAD.params.app_id) + '&client_secret=' + encodeURIComponent(AAD.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AAD.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        returnedData = AAD.request('https://graph.microsoft.com/v1.0/subscribedskus');
+                        data.value = returnedData.value;
+                        //if ('value' in organization && Array.isArray(organization.value) && organization.value.length > 0) {
+                        //    organization.value = organization;
+                        //}
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
+          parameters:
+            -
+              name: app_id
+              value: '{$ZABBIXAPPID}'
+            -
+              name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            -
+              name: tenant_id
+              value: '{$TENANTID}'
+          tags:
+            -
+              tag: Application
+              value: Microsoft365
+            -
+              tag: Type
+              value: Licences
       discovery_rules:
         -
           uuid: 036e824bb92e444e92363830ca5fb44c
@@ -99,7 +441,7 @@ zabbix_export:
                   parameters:
                     - '$.value[?(@.id=="{#ID}")].status.first()'
               master_item:
-                key: 'checkM365Health.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+                key: microsoft365.health.data
               tags:
                 -
                   tag: Application
@@ -107,8 +449,24 @@ zabbix_export:
                 -
                   tag: Type
                   value: Health
+              trigger_prototypes:
+                -
+                  uuid: 57e97f90ad064a54858884e764e12496
+                  expression: 'last(/Microsoft 365 by script/microsoft365.servicestatus[{#ID}])="serviceInterruption"'
+                  name: 'Critic - Microsoft 365 - Service {#SERVICE} Status'
+                  priority: DISASTER
+                -
+                  uuid: 9194b4614bb743a9ab9e2efd614a791e
+                  expression: 'last(/Microsoft 365 by script/microsoft365.servicestatus[{#ID}])="serviceDegradation"'
+                  name: 'High - Microsoft 365 - Service {#SERVICE} Status'
+                  priority: HIGH
+                -
+                  uuid: 9d91a2dfc009470689b1be730b3c70a4
+                  expression: 'last(/Microsoft 365 by script/microsoft365.servicestatus[{#ID}])="Investigating" or last(/Microsoft 365 by script/microsoft365.servicestatus[{#ID}])="extendedRecovery"'
+                  name: 'Warning - Microsoft 365 - Service {#SERVICE} Status'
+                  priority: WARNING
           master_item:
-            key: 'checkM365Health.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+            key: microsoft365.health.data
           lld_macro_paths:
             -
               lld_macro: '{#ID}'
@@ -141,7 +499,7 @@ zabbix_export:
                   parameters:
                     - '$.value[?(@.skuPartNumber=="{#SKUPARTNUMBER}")].prepaidUnits.enabled.first()'
               master_item:
-                key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+                key: microsoft365.licence.data
               tags:
                 -
                   tag: Application
@@ -161,7 +519,7 @@ zabbix_export:
                   parameters:
                     - '$.value[?(@.skuPartNumber=="{#SKUPARTNUMBER}")].consumedUnits.first()'
               master_item:
-                key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+                key: microsoft365.licence.data
               tags:
                 -
                   tag: Application
@@ -170,7 +528,7 @@ zabbix_export:
                   tag: Type
                   value: Licence
           master_item:
-            key: 'checkAzureLicences.py[{$TENANTID},{$APPID},{$APPSECRET}]'
+            key: microsoft365.licence.data
           lld_macro_paths:
             -
               lld_macro: '{#SKUPARTNUMBER}'
@@ -180,3 +538,10 @@ zabbix_export:
               type: JSONPATH
               parameters:
                 - $.value
+      tags:
+        -
+          tag: target
+          value: azure
+        -
+          tag: target
+          value: microsoft
