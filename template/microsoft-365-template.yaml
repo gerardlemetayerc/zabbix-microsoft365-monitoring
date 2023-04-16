@@ -140,6 +140,7 @@ zabbix_export:
               type: JSONPATH
               parameters:
                 - '$.value[0].onPremisesLastSyncDateTime'
+          timeout: 10s
           parameters:
             -
               name: app_id
@@ -400,6 +401,7 @@ zabbix_export:
             }
             
             return JSON.stringify(data);
+          timeout: 10s
           parameters:
             -
               name: app_id
@@ -487,6 +489,38 @@ zabbix_export:
           delay: '0'
           lifetime: 1d
           item_prototypes:
+            -
+              uuid: d0a48c35ee144d5584aa51601a33410b
+              name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - Percent used'
+              type: CALCULATED
+              key: 'microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used]'
+              delay: 30m
+              value_type: FLOAT
+              units: '%'
+              params: '100*last(//microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])/last(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total])'
+              tags:
+                -
+                  tag: Application
+                  value: Microsoft365
+                -
+                  tag: Type
+                  value: Licence
+              trigger_prototypes:
+                -
+                  uuid: 1ecc145041ae463291d51088218e5068
+                  expression: 'last(/Microsoft 365 by script/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])>=100'
+                  name: 'Critic - 100 % {#SKUPARTNUMBER} assigned'
+                  priority: DISASTER
+                -
+                  uuid: 8cda75be50814a2585e22acf88bb04d5
+                  expression: 'last(/Microsoft 365 by script/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])>=90 and last(/Microsoft 365 by script/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])<100'
+                  name: 'High - 90 % {#SKUPARTNUMBER} assigned'
+                  priority: HIGH
+                -
+                  uuid: e0274b8893944336acdd64ebee571ba0
+                  expression: 'last(/Microsoft 365 by script/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])>=80 and last(/Microsoft 365 by script/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])<90'
+                  name: 'Warning - 80 % {#SKUPARTNUMBER} assigned'
+                  priority: WARNING
             -
               uuid: 6db67a12a3414c5f99dabfa5b0dab372
               name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - total'
