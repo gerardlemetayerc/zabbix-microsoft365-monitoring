@@ -592,7 +592,7 @@ zabbix_export:
               delay: 30m
               value_type: FLOAT
               units: '%'
-              params: '100*last(//microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])/last(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total])'
+              params: '(100*last(//microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])*(1-count(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total],#1,"eq",0)))/(last(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total])+count(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total],#1,"eq",0))'
               tags:
                 -
                   tag: Application
@@ -656,6 +656,12 @@ zabbix_export:
                 -
                   tag: Type
                   value: Licence
+          trigger_prototypes:
+            -
+              uuid: 2e8e68292b6743b6adacb14391ff33b2
+              expression: 'last(/Microsoft 365 by HTTP/microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])>0 and last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_total])=0'
+              name: 'Critic - {#SKUPARTNUMBER} - Assigned non-existent licence'
+              priority: HIGH
           master_item:
             key: microsoft365.licence.data
           lld_macro_paths:
