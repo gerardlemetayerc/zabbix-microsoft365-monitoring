@@ -592,7 +592,7 @@ zabbix_export:
               delay: 30m
               value_type: FLOAT
               units: '%'
-              params: '100*last(//microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])/last(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total])'
+              params: '(100*last(//microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])*(1-count(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total],#1,"eq",0)))/(last(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total])+count(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total],#1,"eq",0))'
               tags:
                 -
                   tag: Application
