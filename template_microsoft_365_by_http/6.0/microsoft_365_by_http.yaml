@@ -729,7 +729,7 @@ zabbix_export:
                 - '$.[?(@.required == "true" && @.tcpPorts && @.category == "Allow")]'
         -
           uuid: 29c2eb0e895448c09911c5dd566621f5
-          name: 'Microsoft365 - Public Endpoints - Discovery - TCP - Required - Allow'
+          name: 'Microsoft365 - Public Endpoints - Discovery - TCP - Required - Optimize'
           type: DEPENDENT
           key: microsoft365.publicendpoints.discovery.tcp.required.optimize
           delay: '0'
