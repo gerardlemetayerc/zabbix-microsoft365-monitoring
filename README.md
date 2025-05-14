@@ -37,6 +37,10 @@ You must create an Azure AD application with the following permissions:
    - Register an application in Azure AD.
    - Assign the required permissions listed above.
    - Generate a client secret and note the Application (client) ID, Directory (tenant) ID, and client secret.
+   - Ensure the Azure AD application has the following permissions for EntraID monitoring:
+     - **Application.Read.All**: To read registered applications and their secrets.
+     - **Directory.Read.All**: To access directory-level data.
+   - These permissions are required to monitor registered applications and detect secret expiration dates.
 
 2. **Add Template to Zabbix**
    - Import the `template_microsoft_365_by_http.yaml` file from the appropriate version folder (e.g., `6.4.0` or `7.2.0`).
@@ -50,5 +54,5 @@ You must create an Azure AD application with the following permissions:
      - `{$ZABBIXAPPID}`: Application (client) ID of the Azure AD app registration.
      - `{$ZABBIXAPPSECRET}`: Client secret of the Azure AD app registration.
 
-5. **Verify Data Collection**
+6. **Verify Data Collection**
    - Ensure the Zabbix server or proxy can successfully query the Microsoft Graph API and collect data.
