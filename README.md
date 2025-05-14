@@ -39,7 +39,10 @@ You must create an Azure AD application with the following permissions:
    - Generate a client secret and note the Application (client) ID, Directory (tenant) ID, and client secret.
    - Ensure the Azure AD application has the following permissions for EntraID monitoring:
      - **Application.Read.All**: To read registered applications and their secrets.
+     - **Organization.Read.All**: To access organization-level data.
      - **Directory.Read.All**: To access directory-level data.
+     - **Application.Read.All**: To read registered applications and their secrets.
+     - **License.Read.All**: To access license information.
    - These permissions are required to monitor registered applications and detect secret expiration dates.
 
 2. **Add Template to Zabbix**
