@@ -13,7 +13,7 @@ zabbix_export:
       name: 'Microsoft 365 by HTTP'
       vendor:
         name: 'Charles GERARD-LE METAYER'
-        version: 1.0.0
+        version: 1.2.0
       groups:
         - name: Templates
         - name: Templates/Applications
