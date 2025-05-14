@@ -1,0 +1,923 @@
+zabbix_export:
+  version: '7.2'
+  template_groups:
+    - uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+    - uuid: c2c162144c2d4c5491c8801193af4945
+      name: Templates/Cloud
+  templates:
+    - uuid: 39297d88b83d42ccaa48031706710adf
+      template: 'Microsoft 365 by HTTP'
+      name: 'Microsoft 365 by HTTP'
+      vendor:
+        name: 'Charles GERARD-LE METAYER'
+        version: 1.0.0
+      groups:
+        - name: Templates
+        - name: Templates/Applications
+        - name: Templates/Cloud
+      items:
+        - uuid: 2f2948eee3c34c528992af69bd65332f
+          name: 'Microsoft365 - Organization data'
+          type: SCRIPT
+          key: azureAD.organization.data
+          delay: 30m
+          history: '0'
+          value_type: TEXT
+          params: |
+            var AAD = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AAD.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AAD.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AAD.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AAD.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AAD.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AAD.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AAD.params.app_id) + '&client_secret=' + encodeURIComponent(AAD.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AAD.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        organization = AAD.request('https://graph.microsoft.com/v1.0/organization');
+                        data.value = organization.value;
+                        //if ('value' in organization && Array.isArray(organization.value) && organization.value.length > 0) {
+                        //    organization.value = organization;
+                        //}
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
+          timeout: 10s
+          parameters:
+            - name: app_id
+              value: '{$ZABBIXAPPID}'
+            - name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            - name: tenant_id
+              value: '{$TENANTID}'
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: GraphAPI
+        - uuid: 0782de1f47c74dc6a946d6520217f0b1
+          name: 'Microsoft365 - Directory Size Quota total'
+          type: DEPENDENT
+          key: azureAD.organization.directorySizeQuota.total
+          history: 90d
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.value[0].directorySizeQuota.total'
+          master_item:
+            key: azureAD.organization.data
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: AzureAD
+        - uuid: 9e492def548d4c3a85c28cef4742b6d2
+          name: 'Microsoft365 - Directory Size Quota used'
+          type: DEPENDENT
+          key: azureAD.organization.directorySizeQuota.used
+          history: 90d
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.value[0].directorySizeQuota.used'
+          master_item:
+            key: azureAD.organization.data
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: AzureAD
+        - uuid: 1c033fe9c4eb4a99bda06e16c8f50a34
+          name: 'Microsoft365 - onPremises Last Sync DateTime'
+          type: DEPENDENT
+          key: azureAD.organization.onPremisesLastSyncDateTime
+          history: 90d
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.value[0].onPremisesLastSyncDateTime'
+            - type: JAVASCRIPT
+              parameters:
+                - 'return Math.round(((new Date()).getTime() - (new Date(''2023-04-16T17:18:27Z'')).getTime())/60000)'
+          master_item:
+            key: azureAD.organization.data
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: AzureAD
+          triggers:
+            - uuid: 2542eb89bf9342539826e7679b1d6108
+              expression: 'last(/Microsoft 365 by HTTP/azureAD.organization.onPremisesLastSyncDateTime)>=40 and last(/Microsoft 365 by HTTP/azureAD.organization.onPremisesLastSyncDateTime)<60'
+              name: 'Warning - Last Azure AD Sync - More than 40 min'
+              priority: WARNING
+            - uuid: b83b6918d1ff4ef0b444b23aab1ca545
+              expression: 'last(/Microsoft 365 by HTTP/azureAD.organization.onPremisesLastSyncDateTime)>=60 and last(/Microsoft 365 by HTTP/azureAD.organization.onPremisesLastSyncDateTime)<120'
+              name: 'Warning - Last Azure AD Sync - More than 60 min'
+              priority: HIGH
+        - uuid: 382deb4908c94dabb115fecb18607899
+          name: 'Microsoft365 - Json Applications data'
+          type: SCRIPT
+          key: entraID.application.data
+          delay: 5h
+          history: 1d
+          value_type: TEXT
+          params: |
+            var AADHealth = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AADHealth.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AADHealth.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AADHealth.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AADHealth.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AADHealth.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AADHealth.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AADHealth.params.app_id) + '&client_secret=' + encodeURIComponent(AADHealth.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AADHealth.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        returnedData = AADHealth.request('https://graph.microsoft.com/v1.0/applications');
+                        if ('value' in returnedData && Array.isArray(returnedData.value) && returnedData.value.length > 0) {
+                            data.value = returnedData.value;
+                        }
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
+          parameters:
+            - name: app_id
+              value: '{$ZABBIXAPPID}'
+            - name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            - name: tenant_id
+              value: '{$TENANTID}'
+        - uuid: 4037f81a1c14441eb1fa71d801468533
+          name: 'Microsoft365 - Json Health data'
+          type: SCRIPT
+          key: microsoft365.health.data
+          delay: 1h
+          history: '0'
+          value_type: TEXT
+          params: |
+            var AADHealth = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AADHealth.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AADHealth.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AADHealth.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AADHealth.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AADHealth.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AADHealth.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AADHealth.params.app_id) + '&client_secret=' + encodeURIComponent(AADHealth.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AADHealth.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        returnedData = AADHealth.request('https://graph.microsoft.com/v1.0/admin/serviceAnnouncement/healthOverviews');
+                        if ('value' in returnedData && Array.isArray(returnedData.value) && returnedData.value.length > 0) {
+                            data.value = returnedData.value;
+                        }
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
+          timeout: 10s
+          parameters:
+            - name: app_id
+              value: '{$ZABBIXAPPID}'
+            - name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            - name: tenant_id
+              value: '{$TENANTID}'
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: GraphAPI
+        - uuid: a354ba552c1a441781b5c6d3eaec6bbc
+          name: 'Microsoft365 - Json Licence Data'
+          type: SCRIPT
+          key: microsoft365.licence.data
+          delay: 1h
+          history: '0'
+          value_type: TEXT
+          params: |
+            var AAD = {
+                params: {},
+                token: null,
+            
+                setParams: function (params) {
+                    ['app_id', 'secret', 'tenant_id' ].forEach(function (field) {
+                        if (typeof params !== 'object' || typeof params[field] === 'undefined' || params[field] === '') {
+                            throw 'Required param is not set: ' + field + '.';
+                        }
+                    });
+            
+                    AAD.params = params;
+                },
+            
+            
+                request: function (url, data) {
+                    if (typeof data === 'undefined' || data === null) {
+                        data = '';
+                    }
+            
+                    var response, request = new HttpRequest();
+                        if (AAD.token) {
+                            request.addHeader('Accept: application/json');
+                            request.addHeader('Authorization: Bearer ' + AAD.token);
+                        }
+                
+                    Zabbix.log(4, '[ Azure ] Sending request: ' + url);
+            
+                    if (data !== '') {
+                        request.addHeader('Content-Type: application/x-www-form-urlencoded');
+                        response = request.post(url, data);
+                    }
+                    else {
+                        response = request.get(url);
+                    }
+            
+                    Zabbix.log(4, '[ Azure ] Received response with status code ' + request.getStatus() + ': ' + response);
+            
+                    if (request.getStatus() !== 200 || response === null) {
+                        throw 'Request failed with status code ' + request.getStatus() + ': ' + response;
+                    }
+            
+                    try {
+                        return JSON.parse(response);
+                    }
+                    catch (error) {
+                        throw 'Failed to parse response received from API.';
+                    }
+            }
+            
+            };
+            
+            try {
+                AAD.setParams(JSON.parse(value));
+                data = {};
+                data['errors'] = {};
+                data['value'] = {};
+                try {
+                    result = AAD.request(
+                            'https://login.microsoftonline.com/' + encodeURIComponent(AAD.params.tenant_id) + '/oauth2/v2.0/token',
+                            'grant_type=client_credentials&scope=https://graph.microsoft.com/.default&client_id=' + encodeURIComponent(AAD.params.app_id) + '&client_secret=' + encodeURIComponent(AAD.params.secret)
+                    );
+            
+                    if ('access_token' in result) {
+                        AAD.token = result['access_token'];
+                    } else {
+                        throw 'Auth response does not contain access token.';
+                    }
+                }
+                catch (error) {
+                    data.errors.auth = error.toString();
+                }
+            
+                if (!('auth' in data.errors)) {
+                    try {
+                        returnedData = AAD.request('https://graph.microsoft.com/v1.0/subscribedskus');
+                        data.value = returnedData.value;
+                        //if ('value' in organization && Array.isArray(organization.value) && organization.value.length > 0) {
+                        //    organization.value = organization;
+                        //}
+                    }
+                    catch (error) {
+                        data.errors.token = error.toString();
+                    }
+                }
+            
+            }
+            catch (error) {
+                data.errors.params = error.toString();
+            }
+            
+            if (Object.keys(data.errors).length !== 0) {
+                errors = 'Failed to receive data:';
+                for (var error in data.errors) {
+                    errors += '\n' + error + ' : ' + data.errors[error];
+                }
+                data.errors = errors;
+            }
+            else {
+                data.errors = '';
+            }
+            
+            return JSON.stringify(data);
+          timeout: 10s
+          parameters:
+            - name: app_id
+              value: '{$ZABBIXAPPID}'
+            - name: secret
+              value: '{$ZABBIXAPPSECRET}'
+            - name: tenant_id
+              value: '{$TENANTID}'
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: GraphAPI
+        - uuid: 0f444bbc7dd045609bbb48f3f69a4ece
+          name: 'Microsoft365 - Public Endpoints Data'
+          type: HTTP_AGENT
+          key: microsoft365.publicendpoints.data
+          delay: 1d
+          history: '0'
+          value_type: TEXT
+          url: 'https://endpoints.office.com/endpoints/worldwide'
+          query_fields:
+            - name: clientrequestid
+              value: '{$ZABBIXAPPID}'
+          tags:
+            - tag: Application
+              value: Microsoft365
+            - tag: Type
+              value: API
+      discovery_rules:
+        - uuid: 6df04e8181c9468eae36a5db11b7edb9
+          name: 'Microsoft Entra - Application Discovery'
+          type: DEPENDENT
+          key: entraID.application.discovery
+          item_prototypes:
+            - uuid: 09dafc73f7e74aec8cc2c12e862738a8
+              name: 'Entra Application Secret expiration - {#APPLICATIONDISPLAYNAME} - {#SECRETDISPLAYNAME}'
+              type: SCRIPT
+              key: 'entraID.Application[{#APPLICATIONDISPLAYNAME},{#SECRETDISPLAYNAME}]'
+              delay: 1d
+              trends: '0'
+              params: |
+                dateTime = (JSON.parse(value)).endDateTime;
+                
+                // Fonction pour calculer le nombre de jours restants avant l'expiration
+                function calculateDaysRemaining(expirationDate) {
+                  // Convertir la date d'expiration en objet Date
+                  const expiration = new Date(expirationDate);
+                
+                  // Obtenir la date actuelle
+                  const now = new Date();
+                
+                  // Calculer la différence en millisecondes entre la date d'expiration et aujourd'hui
+                  const timeDifference = expiration - now;
+                
+                  // Convertir la différence de temps en jours (1 jour = 24 * 60 * 60 * 1000 millisecondes)
+                  const daysRemaining = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
+                  if(daysRemaining < 0){ daysRemaining = 0; }
+                  // Retourner le nombre de jours restants
+                  return daysRemaining;
+                }
+                
+                // Appeler la fonction avec la date d'expiration
+                return calculateDaysRemaining(dateTime);
+              parameters:
+                - name: endDateTime
+                  value: '{#SECRETENDDATETIME}'
+              tags:
+                - tag: Application
+                  value: MicrosoftEntra
+                - tag: Type
+                  value: EnterpriseApp
+              trigger_prototypes:
+                - uuid: 858e01300de647379ab3649d4743b284
+                  expression: 'last(/Microsoft 365 by HTTP/entraID.Application[{#APPLICATIONDISPLAYNAME},{#SECRETDISPLAYNAME}])<=10'
+                  name: 'DANGER - Entra Application Secret expiration - {#APPLICATIONDISPLAYNAME} - {#SECRETDISPLAYNAME}'
+                  priority: HIGH
+                  manual_close: 'YES'
+                  dependencies:
+                    - name: 'WARNING - Entra Application Secret expiration - {#APPLICATIONDISPLAYNAME} - {#SECRETDISPLAYNAME}'
+                      expression: 'last(/Microsoft 365 by HTTP/entraID.Application[{#APPLICATIONDISPLAYNAME},{#SECRETDISPLAYNAME}])<30'
+                - uuid: 4a4c68a357a34e8c89a4771c07f4ed31
+                  expression: 'last(/Microsoft 365 by HTTP/entraID.Application[{#APPLICATIONDISPLAYNAME},{#SECRETDISPLAYNAME}])<30'
+                  name: 'WARNING - Entra Application Secret expiration - {#APPLICATIONDISPLAYNAME} - {#SECRETDISPLAYNAME}'
+                  priority: AVERAGE
+          master_item:
+            key: entraID.application.data
+          lld_macro_paths:
+            - lld_macro: '{#APPLICATIONDISPLAYNAME}'
+              path: $.applicationDisplayName
+            - lld_macro: '{#SECRETDISPLAYNAME}'
+              path: $.secretDisplayName
+            - lld_macro: '{#SECRETENDDATETIME}'
+              path: $.secretEndDateTime
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  const data = JSON.parse(value);
+                  const transformedData = [];
+                  for (var i = 0; i < data.value.length; i++) {
+                    const app = data.value[i];
+                  
+                    // Parcourir chaque secret de l'application
+                    for (var j = 0; j < app.passwordCredentials.length; j++) {
+                      const secret = app.passwordCredentials[j];
+                  
+                      // Ajouter les informations au tableau transformedData
+                      transformedData.push({
+                        applicationDisplayName: app.displayName,
+                        secretDisplayName: secret.displayName,
+                        secretEndDateTime: secret.endDateTime
+                      });
+                    }
+                  }
+                  
+                  return JSON.stringify(transformedData );
+        - uuid: 036e824bb92e444e92363830ca5fb44c
+          name: 'Microsoft 365 - Check Health - Discovery'
+          type: DEPENDENT
+          key: microsoft365.checkHealth.discovery
+          lifetime: 1d
+          enabled_lifetime_type: DISABLE_NEVER
+          item_prototypes:
+            - uuid: 348ef863ea794d38a3627f8f0cf7dc9d
+              name: 'Microsoft 365 - Service {#SERVICE} Status'
+              type: DEPENDENT
+              key: 'microsoft365.servicestatus[{#ID}]'
+              history: 30d
+              value_type: TEXT
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.value[?(@.id=="{#ID}")].status.first()'
+              master_item:
+                key: microsoft365.health.data
+              tags:
+                - tag: Application
+                  value: Microsoft365
+                - tag: Type
+                  value: Health
+              trigger_prototypes:
+                - uuid: 57e97f90ad064a54858884e764e12496
+                  expression: 'last(/Microsoft 365 by HTTP/microsoft365.servicestatus[{#ID}])="serviceInterruption"'
+                  name: 'Critic - Microsoft 365 - Service {#SERVICE} Status'
+                  priority: DISASTER
+                - uuid: 9194b4614bb743a9ab9e2efd614a791e
+                  expression: 'last(/Microsoft 365 by HTTP/microsoft365.servicestatus[{#ID}])="serviceDegradation"'
+                  name: 'High - Microsoft 365 - Service {#SERVICE} Status'
+                  priority: HIGH
+                - uuid: 9d91a2dfc009470689b1be730b3c70a4
+                  expression: 'last(/Microsoft 365 by HTTP/microsoft365.servicestatus[{#ID}])="Investigating" or last(/Microsoft 365 by HTTP/microsoft365.servicestatus[{#ID}])="extendedRecovery"'
+                  name: 'Warning - Microsoft 365 - Service {#SERVICE} Status'
+                  priority: WARNING
+          master_item:
+            key: microsoft365.health.data
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.id
+            - lld_macro: '{#SERVICE}'
+              path: $.service
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.value
+        - uuid: 82c1e7c19d174acaa2a23513ee38931f
+          name: 'Microsoft 365 - Check Licence - Discovery'
+          type: DEPENDENT
+          key: microsoft365.checkLicence.discovery
+          lifetime: 1d
+          enabled_lifetime_type: DISABLE_NEVER
+          item_prototypes:
+            - uuid: d0a48c35ee144d5584aa51601a33410b
+              name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - Percent used'
+              type: CALCULATED
+              key: 'microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used]'
+              delay: 30m
+              value_type: FLOAT
+              units: '%'
+              params: '(100*last(//microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])*(1-count(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total],#1,"eq",0)))/(last(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total])+count(//microsoft365.check.licence.[{#SKUPARTNUMBER}_total],#1,"eq",0))'
+              tags:
+                - tag: Application
+                  value: Microsoft365
+                - tag: Type
+                  value: Licence
+              trigger_prototypes:
+                - uuid: 1ecc145041ae463291d51088218e5068
+                  expression: 'last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])>=100'
+                  name: 'Critic - 100 % {#SKUPARTNUMBER} assigned'
+                  priority: DISASTER
+                - uuid: 8cda75be50814a2585e22acf88bb04d5
+                  expression: 'last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])>=90 and last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])<100'
+                  name: 'High - 90 % {#SKUPARTNUMBER} assigned'
+                  priority: HIGH
+                - uuid: e0274b8893944336acdd64ebee571ba0
+                  expression: 'last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])>=80 and last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_percent_used])<90'
+                  name: 'Warning - 80 % {#SKUPARTNUMBER} assigned'
+                  priority: WARNING
+            - uuid: 6db67a12a3414c5f99dabfa5b0dab372
+              name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - total'
+              type: DEPENDENT
+              key: 'microsoft365.check.licence.[{#SKUPARTNUMBER}_total]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.value[?(@.skuPartNumber=="{#SKUPARTNUMBER}")].prepaidUnits.enabled.first()'
+              master_item:
+                key: microsoft365.licence.data
+              tags:
+                - tag: Application
+                  value: Microsoft365
+                - tag: Type
+                  value: Licence
+            - uuid: fb52aadbac2e4a02b7df8a7112a1405e
+              name: 'Microsoft 365 - Licence {#SKUPARTNUMBER} - consumedUnits'
+              type: DEPENDENT
+              key: 'microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.value[?(@.skuPartNumber=="{#SKUPARTNUMBER}")].consumedUnits.first()'
+              master_item:
+                key: microsoft365.licence.data
+              tags:
+                - tag: Application
+                  value: Microsoft365
+                - tag: Type
+                  value: Licence
+          trigger_prototypes:
+            - uuid: 2e8e68292b6743b6adacb14391ff33b2
+              expression: 'last(/Microsoft 365 by HTTP/microsoft365.check.licence[{#SKUPARTNUMBER}_consumedUnits])>0 and last(/Microsoft 365 by HTTP/microsoft365.check.licence.[{#SKUPARTNUMBER}_total])=0'
+              name: 'Critic - {#SKUPARTNUMBER} - Assigned non-existent licence'
+              priority: HIGH
+          master_item:
+            key: microsoft365.licence.data
+          lld_macro_paths:
+            - lld_macro: '{#SKUPARTNUMBER}'
+              path: $.skuPartNumber
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.value
+        - uuid: b3b098affb294b078d3506926e24af6b
+          name: 'Microsoft365 - Public Endpoints - Discovery - TCP - Required - Allow'
+          type: DEPENDENT
+          key: microsoft365.publicendpoints.discovery.tcp.required.allow
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: |
+            Allow endpoints are required for connectivity to specific Office 365 services and features, but are not as sensitive to network performance and latency as those in the Optimize category. The overall network footprint of these endpoints from the standpoint of bandwidth and connection count is also smaller. These endpoints are dedicated to Office 365 and are hosted in Microsoft datacenters. They represent a broad set of Office 365 micro-services and their dependencies (on the order of ~100 URLs) and are expected to change at a higher rate than those in the Optimize category. Not all endpoints in this category are associated with defined dedicated IP subnets.
+            
+            Network optimizations for Allow endpoints can improve the Office 365 user experience, but some customers may choose to scope those optimizations more narrowly to minimize changes to their network.
+            
+            Examples of Allow endpoints include https://*.protection.outlook.com and https://accounts.accesscontrol.windows.net.
+            
+            Optimization methods include:
+            
+            Bypass Allow endpoints on network devices and services that perform traffic interception, SSL decryption, deep packet inspection, and content filtering.
+            Prioritize the evaluation of these endpoints as fully trusted by your network infrastructure and perimeter systems.
+            Prioritize reduction or elimination of WAN backhauling, and facilitate direct distributed Internet-based egress for these endpoints as close to users/branch locations as possible.
+            Ensure that IP addresses returned by DNS name resolution match the routing egress path for these endpoints.
+            Prioritize these endpoints for SD-WAN integration for direct, minimal latency routing into the nearest Internet peering point of the Microsoft global network.
+          item_prototypes:
+            - uuid: 9466b2b2f232453181a45207bdb1aea7
+              name: 'Microsoft365 Public Endpoints - {#SERVICEAREA} - TCP {#TCPPORTS} - Required - Allow'
+              type: DEPENDENT
+              key: 'microsoft365.publicendpoints.tcp.allow.required[{#ID}]'
+              history: 2d
+              value_type: TEXT
+              description: 'Authorization for {#TCPPORTS} - Service {#SERVICEAREA}'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.id == {#ID})]'
+              master_item:
+                key: microsoft365.publicendpoints.data
+              tags:
+                - tag: Type
+                  value: 'Microsoft365 Public Endpoints'
+              trigger_prototypes:
+                - uuid: 93fbf6cb976e4a3299c54541dd2d7fbe
+                  expression: 'change(/Microsoft 365 by HTTP/microsoft365.publicendpoints.tcp.allow.required[{#ID}])=1'
+                  recovery_mode: NONE
+                  name: 'Warning - Change on {#SERVICEAREA} - TCP {#TCPPORTS} - Required - Allow'
+                  priority: WARNING
+                  manual_close: 'YES'
+          master_item:
+            key: microsoft365.publicendpoints.data
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.id
+            - lld_macro: '{#SERVICEAREADISPLAYNAME}'
+              path: $.serviceAreaDisplayName
+            - lld_macro: '{#SERVICEAREA}'
+              path: $.serviceArea
+            - lld_macro: '{#TCPPORTS}'
+              path: $.tcpPorts
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.[?(@.required == "true" && @.tcpPorts && @.category == "Allow")]'
+        - uuid: 29c2eb0e895448c09911c5dd566621f5
+          name: 'Microsoft365 - Public Endpoints - Discovery - TCP - Optimize - Allow'
+          type: DEPENDENT
+          key: microsoft365.publicendpoints.discovery.tcp.required.optimize
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: |
+            Optimize endpoints are required for connectivity to every Office 365 service and represent over 75% of Office 365 bandwidth, connections, and volume of data. These endpoints represent Office 365 scenarios that are the most sensitive to network performance, latency, and availability. All endpoints are hosted in Microsoft datacenters. The rate of change to the endpoints in this category is expected to be much lower than for the endpoints in the other two categories. This category includes a small (on the order of ~10) set of key URLs and a defined set of IP subnets dedicated to core Office 365 workloads such as Exchange Online, SharePoint Online, Skype for Business Online, and Microsoft Teams.
+            
+            A condensed list of well-defined critical endpoints should help you to plan and implement high value network optimizations for these destinations faster and easier.
+            
+            Examples of Optimize endpoints include https://outlook.office365.com, https://<tenant>.sharepoint.com, and https://<tenant>-my.sharepoint.com.
+            
+            Optimization methods include:
+            
+            Bypass Optimize endpoints on network devices and services that perform traffic interception, SSL decryption, deep packet inspection, and content filtering.
+            Bypass on-premises proxy devices and cloud-based proxy services commonly used for generic Internet browsing.
+            Prioritize the evaluation of these endpoints as fully trusted by your network infrastructure and perimeter systems.
+            Prioritize reduction or elimination of WAN backhauling, and facilitate direct distributed Internet-based egress for these endpoints as close to users/branch locations as possible.
+            Facilitate direct connectivity to these cloud endpoints for VPN users by implementing split tunneling.
+            Ensure that IP addresses returned by DNS name resolution match the routing egress path for these endpoints.
+            Prioritize these endpoints for SD-WAN integration for direct, minimal latency routing into the nearest Internet peering point of the Microsoft global network.
+          item_prototypes:
+            - uuid: febf69f6f3e34b7488e4ec928a70beb5
+              name: 'Microsoft365 Public Endpoints - {#SERVICEAREA} - TCP {#TCPPORTS} - Required - Optimize'
+              type: DEPENDENT
+              key: 'microsoft365.publicendpoints.tcp.allow.optimize[{#ID}]'
+              history: 2d
+              value_type: TEXT
+              description: 'Authorization for {#TCPPORTS} - Service {#SERVICEAREA}'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.id == {#ID})]'
+              master_item:
+                key: microsoft365.publicendpoints.data
+              tags:
+                - tag: Type
+                  value: 'Microsoft365 Public Endpoints'
+              trigger_prototypes:
+                - uuid: f4c2fbe2a311448c9aa44c3848c9849d
+                  expression: 'change(/Microsoft 365 by HTTP/microsoft365.publicendpoints.tcp.allow.optimize[{#ID}])=1'
+                  recovery_mode: NONE
+                  name: 'Warning - Change on {#SERVICEAREA} - TCP {#TCPPORTS} - Required - Optimize'
+                  priority: WARNING
+                  manual_close: 'YES'
+          master_item:
+            key: microsoft365.publicendpoints.data
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.id
+            - lld_macro: '{#SERVICEAREADISPLAYNAME}'
+              path: $.serviceAreaDisplayName
+            - lld_macro: '{#SERVICEAREA}'
+              path: $.serviceArea
+            - lld_macro: '{#TCPPORTS}'
+              path: $.tcpPorts
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.[?(@.required == "true" && @.tcpPorts && @.category == "Optimize")]'
+      tags:
+        - tag: target
+          value: azure
+        - tag: target
+          value: microsoft
