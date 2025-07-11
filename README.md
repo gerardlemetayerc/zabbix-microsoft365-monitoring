@@ -15,20 +15,26 @@ Include the following monitoring capabilities:
 
 You must create an Azure AD application with the following permissions:
 
-#### Delegated Permissions
-- **Directory.Read.All**: To read organization data.
-- **Reports.Read.All**: To access usage reports and health data.
-- **User.Read.All**: To read user profiles.
+### Delegated Permissions
 
-#### Application Permissions
-- **Organization.Read.All**: To access organization-level data.
-- **ServiceHealth.Read.All**: To read service health and announcements.
-- **License.Read.All**: To access license information.
-- **Application.Read.All**: To read registered applications and their secrets.
+| Permission           | Description                             |
+|---------------------|-----------------------------------------|
+| Directory.Read.All  | To read organization data.              |
+| Reports.Read.All    | To access usage reports and health data.|
+| User.Read.All       | To read user profiles.                  |
+
+### Application Permissions
+
+| Permission              | Description                                      |
+|------------------------|--------------------------------------------------|
+| Application.Read.All   | To read registered applications and their secrets.|
+| Organization.Read.All  | To access organization-level data and license informations.|
+| Directory.Read.All     | To access directory-level data.                   |
+| ServiceHealth.Read.All | To access service status information data.       |
 
 ### On Zabbix server (or Zabbix proxy)
 
-* Validated with Zabbix version 6.4 and above.
+* Validated with Zabbix version 7.2.10 and above.
 * Ensure the Zabbix server or proxy has internet access to query Microsoft Graph API endpoints.
 
 ## How to install
@@ -37,12 +43,7 @@ You must create an Azure AD application with the following permissions:
    - Register an application in Azure AD.
    - Assign the required permissions listed above.
    - Generate a client secret and note the Application (client) ID, Directory (tenant) ID, and client secret.
-   - Ensure the Azure AD application has the following permissions for EntraID monitoring:
-     - **Application.Read.All**: To read registered applications and their secrets.
-     - **Organization.Read.All**: To access organization-level data.
-     - **Directory.Read.All**: To access directory-level data.
-     - **Application.Read.All**: To read registered applications and their secrets.
-     - **License.Read.All**: To access license information.
+   - Ensure the Azure AD application has the following permissions for EntraID monitoring from the table above.
    - These permissions are required to monitor registered applications and detect secret expiration dates.
 
 2. **Add Template to Zabbix**
